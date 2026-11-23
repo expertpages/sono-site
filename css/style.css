@@ -72,15 +72,28 @@ body {
 /* ============ КАРТОЧКА КВИЗА ============ */
 .quiz {
   flex: 1;
-  min-height: 0;              /* позволяет flex-элементу скроллиться */
-  overflow-y: auto;           /* если шаг не влезает — скролл внутри карточки */
-  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  overflow: hidden;            /* скроллится только внутренняя область */
   background: var(--card);
   border: 1px solid rgba(255,255,255,.07);
   border-radius: 24px;
-  padding: 24px 20px;
   display: flex;
   flex-direction: column;
+}
+/* верх карточки — скроллится, если контент не влезает */
+.quiz__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 24px 20px 8px;
+  display: flex;
+  flex-direction: column;
+}
+/* низ карточки — кнопки шага всегда закреплены, никогда не перекрываются */
+.quiz__footer {
+  flex-shrink: 0;
+  padding: 10px 20px 18px;
 }
 
 /* короткая инфа на первом шаге */
@@ -111,8 +124,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  flex: 1;          /* занимает всё свободное место карточки */
-  min-height: 0;
+  flex: 1;          /* занимает всё свободное место */
+  /* min-height не ограничиваем: если не влезает — скролл, а не сжатие */
 }
 .chip {
   flex: 1;          /* кнопки делят свободную высоту между собой */
@@ -160,10 +173,9 @@ body {
 .textarea { min-height: 110px; resize: vertical; }
 .error-text { color: #f87171; font-size: 13px; margin-top: 6px; display: none; }
 
-/* действия шага — прижаты к низу карточки */
+/* действия шага — в закреплённом низу карточки */
 .quiz__actions {
   display: flex; gap: 10px;
-  margin-top: auto; padding-top: 20px;
 }
 .btn {
   border: none;
