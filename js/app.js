@@ -66,8 +66,16 @@ function setProgress(step, total) {
 }
 
 function render(html) {
-  card().innerHTML = html;
-  card().scrollTop = 0; // карточка всегда показывает начало шага, страница не листается
+  // Кнопки шага (Дальше/Назад) отделяем в закреплённый низ карточки,
+  // а остальное кладём в скролл-область — наложений быть не может.
+  const idx = html.indexOf('<div class="quiz__actions"');
+  const scrollPart = idx === -1 ? html : html.slice(0, idx);
+  const actionsPart = idx === -1 ? '' : html.slice(idx);
+  card().innerHTML =
+    '<div class="quiz__scroll">' + scrollPart + '</div>' +
+    (actionsPart ? '<div class="quiz__footer">' + actionsPart + '</div>' : '');
+  const sc = card().querySelector('.quiz__scroll');
+  if (sc) sc.scrollTop = 0;
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
