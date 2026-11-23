@@ -233,6 +233,9 @@ function stepFinal() {
     btn.disabled = state.name.length === 0;
   });
   detailsInp.addEventListener('input', () => { state.details = detailsInp.value.trim(); });
+  // нажатие «Дальше» → запускаем генерацию текста
+  btn.addEventListener('click', () => { if (!btn.disabled) startGeneration(); });
+  nameInp.addEventListener('keydown', e => { if (e.key === 'Enter' && state.name) { e.preventDefault(); startGeneration(); } });
   document.getElementById('btn-back').addEventListener('click', () => backTo && backTo());
   nameInp.focus();
 }
