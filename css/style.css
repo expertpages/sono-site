@@ -119,17 +119,14 @@ body {
   margin-bottom: 20px;
 }
 
-/* кнопки-варианты — один столбик, растянуты на всю высоту экрана */
+/* кнопки-варианты — высоту и число столбцов задаёт sizeChips() в app.js,
+   чтобы они ровно заполняли экран и все были видны */
 .chips {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr; /* JS переключает на 2 колонки, если вариантов много */
   gap: 10px;
-  flex: 1;          /* занимает всё свободное место */
-  /* min-height не ограничиваем: если не влезает — скролл, а не сжатие */
 }
 .chip {
-  flex: 1;          /* кнопки делят свободную высоту между собой */
-  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -137,11 +134,12 @@ body {
   background: var(--card-2);
   color: var(--text);
   border-radius: 14px;
-  padding: 10px 12px;
+  padding: 6px 12px;
   font-family: inherit;
   font-size: 16px; font-weight: 700;
   cursor: pointer;
   text-align: center;
+  overflow: hidden;
   transition: all .15s;
 }
 .chip:active { transform: scale(.96); }
