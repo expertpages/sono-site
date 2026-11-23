@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Sono — персональная AI-песня за 5 минут</title>
+  <meta name="description" content="Ответьте на пару вопросов — ИИ напишет текст с именем и споёт живым голосом. Демо бесплатно, оплата когда понравится.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <!--
+
+    Meta Pixel: раскомментируйте и вставьте свой код, когда понадобится трекинг рекламы.
+
+  -->
+</head>
+<body>
+
+  <div class="app">
+
+    <!-- верх: логотип + прогресс -->
+    <header class="top">
+      <div class="top__logo">🎵 Sono</div>
+      <div class="progress"><div class="progress__fill" id="progress-fill"></div></div>
+      <div class="progress__label"><span id="progress-step">Шаг 1</span> из 5</div>
+    </header>
+
+    <!-- экран квиза -->
+    <main class="quiz" id="quiz-card"></main>
+
+    <!-- низ: мелкие ссылки -->
+    <footer class="bottom">
+      <span>© Sono</span>
+      <a href="#">Оферта</a>
+      <a href="#">Поддержка</a>
+    </footer>
+
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
