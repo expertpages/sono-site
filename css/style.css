@@ -194,10 +194,45 @@ body {
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn--outline-accent { background: transparent; border: 1.5px solid var(--accent); color: #d6c8ff; }
 
-/* загрузка */
+/* загрузка (обычная) */
 .loading {
   text-align: center; padding: 40px 0;
   margin: auto;
+}
+/* загрузка главная: пульсирующая нота + статус + прогресс */
+.loading--big {
+  padding: 20px 24px;
+  margin: auto 0;
+}
+.loading__icon {
+  font-size: 46px;
+  line-height: 1;
+  margin-bottom: 16px;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: .7; }
+  50% { transform: scale(1.22); opacity: 1; }
+}
+.loading__status {
+  color: var(--muted);
+  font-size: 14.5px;
+  min-height: 22px;
+}
+.loading__bar {
+  height: 5px;
+  width: 72%;
+  margin: 16px auto 0;
+  background: var(--card-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.loading__bar-fill {
+  height: 100%;
+  width: 8%;
+  background: var(--accent-grad);
+  border-radius: 999px;
+  transition: width .6s ease;
 }
 .loading__spinner {
   width: 56px; height: 56px;
