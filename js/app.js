@@ -133,6 +133,33 @@ function sizeChips() {
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+/* Экран загрузки: пульсирующая нота + живой статус + полоска прогресса */
+let loadingTimer = null;
+function renderLoading({ icon, title, steps }) {
+  stopLoading();
+  render(`
+    <div class="loading loading--big">
+      <div class="loading__icon">${icon}</div>
+      <div class="loading__title">${title}</div>
+      <div class="loading__status" id="loading-status">${steps[0]}</div>
+      <div class="loading__bar"><div class="loading__bar-fill" id="loading-bar"></div></div>
+    </div>
+  `);
+  let i = 0;
+  let progress = 8;
+  loadingTimer = setInterval(() => {
+    i = (i + 1) % steps.length;
+    progress = Math.min(92, progress + 12);
+    const s = document.getElementById('loading-status');
+    const b = document.getElementById('loading-bar');
+    if (s) s.textContent = steps[i];
+    if (b) b.style.width = progress + '%';
+  }, 2200);
+}
+function stopLoading() {
+  if (loadingTimer) { clearInterval(loadingTimer); loadingTimer = null; }
+}
+
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function plural(n, one, few, many) {
@@ -243,13 +270,11 @@ function stepVocal()    { backTo = stepGenre;   renderChipStep({ step: 4, total:
 async function startGeneration() {
   backTo = stepFinal;
   setProgress(5, TOTAL_STEPS);
-  render(`
-    <div class="loading">
-      <div class="loading__spinner"></div>
-      <div class="loading__title">Пишу персональный текст песни 🎵</div>
-      <div class="loading__text">Обычно это занимает несколько минут</div>
-    </div>
-  `);
+  renderLoading({
+    icon: '🎵',
+    title: 'Пишу персональный текст песни',
+    steps: ['Читаю вашу историю…', 'Придумываю рифмы…', 'Вплетаю имя в припев…', 'Полирую строки…'],
+  });
 
   if (CONFIG.MOCK_MODE) {
     await sleep(CONFIG.MOCK_LYRICS_DELAY);
@@ -259,6 +284,7 @@ async function startGeneration() {
     // РЕАЛЬНЫЙ ЗАПРОС — включится, когда MOCK_MODE = false
     // await apiCreateOrder(); await apiGenerateLyrics();
   }
+  stopLoading();
   renderLyrics();
 }
 
@@ -281,18 +307,17 @@ function renderLyrics() {
 /* ============ ГЕНЕРАЦИЯ ДЕМО ============ */
 
 async function startDemo() {
-  render(`
-    <div class="loading">
-      <div class="loading__spinner"></div>
-      <div class="loading__title">Создаю музыку и короткий демо-фрагмент 🎧</div>
-      <div class="loading__text">Обычно до 5 минут, в часы пик до 20</div>
-    </div>
-  `);
+  renderLoading({
+    icon: '🎧',
+    title: 'Создаю музыку и демо-фрагмент',
+    steps: ['Подбираю инструменты…', 'Записываю вокал…', 'Свожу трек…', 'Вырезаю демо 30 секунд…'],
+  });
   if (CONFIG.MOCK_MODE) {
     await sleep(CONFIG.MOCK_MUSIC_DELAY);
   } else {
     // await apiGenerateMusic();
   }
+  stopLoading();
   renderDemo();
 }
 
@@ -395,60 +420,69 @@ function stepEmail() {
 function renderSummary() {
   const p = priceOf(state.pack);
   const rest = p.songs - 1;
+  // ЛОГИКА ОПЛАТЫ: выбрали Россию → ЮKassa, любую другую страну → Lava.top
   const fromRussia = state.country === '🇷🇺 Россия';
+  const provider = fromRussia ? 'yookassa' : 'lava';
   const method = fromRussia
-    ? '💳 Оплата картой РФ / СБП (ЮKassa)'
-    : '🌍 Оплата зарубежной картой (Lava)';
+    ? '💳 Способ: карта РФ / СБП — ЮKassa'
+    : '🌍 Способ: зарубежная карта — Lava';
   const amount = fromRussia ? p.rub + ' ₽' : '$' + p.usd;
+  const note = fromRussia
+    ? ''
+    : '<div class="quiz__hint" style="margin-top:12px;">Сумма в долларах — пересчёт по курсу Банка России на момент оплаты</div>';
+  const payName = fromRussia ? 'ЮKassa' : 'Lava.top';
+  const mockNote = CONFIG.MOCK_MODE
+    ? '<div class="mock-note">Демо-режим: кнопка не ведёт на реальную оплату. После подключения ключей «Перейти к оплате» откроет ' + payName + '.</div>'
+    : '';
 
   render(`
     <div class="quiz__question">💳 Покупка полной версии</div>
     <div class="summary">
       Пакет: ${p.songs} ${plural(p.songs, 'генерация', 'генерации', 'генераций')}<br>
-      Сумма: <b>${amount}</b><br><br>
+      Сумма: <b>${amount}</b><br>
+      ${method}<br><br>
       После оплаты одна генерация пойдёт на эту песню, ещё ${rest} ${plural(rest, 'останется', 'останутся', 'останутся')} на балансе.
     </div>
-    ${CONFIG.MOCK_MODE ? '<div class="mock-note">Демо-режим: кнопка не ведёт на реальную оплату. После подключения ключей здесь будет переход на ЮKassa (РФ) или Lava (другие страны).</div>' : ''}
+    ${mockNote}
     <div class="pay-methods" style="margin-top:18px;">
       <button class="btn btn--accent" id="btn-pay-go">💳 Перейти к оплате</button>
       <button class="btn" id="btn-check">✅ Проверить оплату</button>
       <button class="btn btn--ghost" id="btn-change">🔄 Изменить пакет</button>
     </div>
-    <div class="quiz__hint" style="margin-top:12px;">${method}</div>
+    ${note}
   `);
-  document.getElementById('btn-pay-go').addEventListener('click', () => pay(fromRussia ? 'yookassa' : 'lava'));
+  document.getElementById('btn-pay-go').addEventListener('click', () => pay(provider));
   document.getElementById('btn-check').addEventListener('click', checkPayment);
   document.getElementById('btn-change').addEventListener('click', stepPack);
 }
 
 async function pay(provider) {
-  render(`
-    <div class="loading">
-      <div class="loading__spinner"></div>
-      <div class="loading__title">Создаём ссылку на оплату…</div>
-      <div class="loading__text">${provider === 'yookassa' ? 'ЮKassa' : 'Lava'} · обычно пару секунд</div>
-    </div>
-  `);
+  renderLoading({
+    icon: '💳',
+    title: 'Открываю ' + (provider === 'yookassa' ? 'ЮKassa' : 'Lava'),
+    steps: ['Формирую счёт на оплату…', 'Чек придёт на ' + state.email, 'Готовлю ссылку…'],
+  });
   if (CONFIG.MOCK_MODE) {
-    await sleep(1200);
+    await sleep(2200);
+    stopLoading();
     renderSuccess(true);
     return;
   }
   // РЕАЛЬНАЯ ОПЛАТА — включится после доступов:
+  // provider = 'yookassa' (Россия) или 'lava' (другие страны)
   // const url = await apiCreatePayment(provider);
   // window.location.href = url;
 }
 
 async function checkPayment() {
-  render(`
-    <div class="loading">
-      <div class="loading__spinner"></div>
-      <div class="loading__title">Проверяем оплату…</div>
-      <div class="loading__text">Если всё ок — сразу пришлём песню на почту</div>
-    </div>
-  `);
+  renderLoading({
+    icon: '⏳',
+    title: 'Проверяю оплату',
+    steps: ['Запрашиваю статус счёта…', 'Сверяю платежи…'],
+  });
   if (CONFIG.MOCK_MODE) {
-    await sleep(1500);
+    await sleep(1800);
+    stopLoading();
     renderSuccess(true);
     return;
   }
