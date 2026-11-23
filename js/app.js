@@ -10,7 +10,9 @@
 
 const CONFIG = {
   // true = демо-режим: всё работает на заглушках, API не дёргается.
-  // false = рабочий режим: сайт ходит на бэкенд за текстом/музыкой/оплатой.
+  // false = рабочий режим: сайт ходит на наш бэкенд на Netlify
+  // (/.netlify/functions/... — тот же домен, что и сайт).
+  // ⚙️ КОГДА ПРИДУТ КЛЮЧИ KIE — ПОМЕНЯТЬ НА false, и весь путь оживёт.
   MOCK_MODE: true,
 
   // Адрес бэкенда (из переписки — тестовый сервер, потом поменяем на боевой)
@@ -45,9 +47,11 @@ const state = {
   details: '',       // привычки, истории, пожелания
   email: '',         // почта для оплаты и получения песни
   orderId: null,     // id заказа с бэкенда
+  token: null,       // секретный токен заказа (для ссылок)
   lyrics: '',        // текст песни
   editNote: '',      // что человек просил исправить в тексте
-  fullSongUrl: null, // ссылка на полную версию (придёт с бэкенда после оплаты)
+  demoUrl: null,     // ссылка на демо (с бэкенда)
+  fullSongUrl: null, // ссылка на полную версию (с бэкенда после оплаты)
 };
 
 /* ============ УТИЛИТЫ ============ */
@@ -157,6 +161,34 @@ function stopLoading() {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* запрос к нашему бэкенду (тот же домен) */
+async function api(path, method, body) {
+  const res = await fetch(path, {
+    method: method || 'GET',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('Ошибка ' + res.status));
+  return data;
+}
+
+/* экран ошибки с кнопкой «попробовать снова» */
+function renderError(message, retry) {
+  stopLoading();
+  render(`
+    <div class="quiz__question" style="text-align:center;">Ой, что-то пошло не так 😔</div>
+    <div class="quiz__hint" style="text-align:center;">${esc(message)}</div>
+    <div class="quiz__actions" style="justify-content:center;">
+      ${retry ? '<button class="btn btn--accent" id="btn-retry">Попробовать снова</button>' : ''}
+      <button class="btn btn--ghost" id="btn-restart">Начать заново</button>
+    </div>
+  `);
+  const r = document.getElementById('btn-retry');
+  if (r) r.addEventListener('click', retry);
+  document.getElementById('btn-restart').addEventListener('click', resetQuiz);
+}
 
 function plural(n, one, few, many) {
   if (n % 10 === 1 && n % 100 !== 11) return one;
@@ -274,16 +306,30 @@ async function startGeneration() {
       : ['Читаю вашу историю…', 'Придумываю рифмы…', 'Вплетаю имя в припев…', 'Полирую строки…'],
   });
 
-  if (CONFIG.MOCK_MODE) {
-    await sleep(CONFIG.MOCK_LYRICS_DELAY);
-    state.lyrics = mockLyrics();
-    state.orderId = 'demo-' + Math.random().toString(36).slice(2, 10);
-  } else {
-    // РЕАЛЬНЫЙ ЗАПРОС — включится, когда MOCK_MODE = false
-    // await apiCreateOrder(); await apiGenerateLyrics();
+  try {
+    if (CONFIG.MOCK_MODE) {
+      await sleep(CONFIG.MOCK_LYRICS_DELAY);
+      state.lyrics = mockLyrics();
+      state.orderId = 'demo-' + Math.random().toString(36).slice(2, 10);
+    } else {
+      // создаём заказ на бэкенде: он пишет текст через ИИ и сохраняет всё
+      const res = await api('/.netlify/functions/order', 'POST', {
+        country: state.country,
+        occasion: state.occasion,
+        genre: state.genre,
+        vocal: state.vocal,
+        name: state.name,
+        details: state.details,
+      });
+      state.orderId = res.orderId;
+      state.token = res.token;
+      state.lyrics = res.lyrics;
+    }
+    stopLoading();
+    renderLyrics();
+  } catch (e) {
+    renderError(e.message, startGeneration);
   }
-  stopLoading();
-  renderLyrics();
 }
 
 function renderLyrics() {
@@ -325,8 +371,30 @@ function renderEditNote() {
     document.getElementById('err').style.display = 'none';
   });
   document.getElementById('btn-back').addEventListener('click', renderLyrics);
-  btn.addEventListener('click', () => { if (!btn.disabled) startGeneration(); });
+  btn.addEventListener('click', () => { if (!btn.disabled) submitEditNote(); });
   inp.focus();
+}
+
+/* отправка правки: в демо просто перегенерим, в бою — отправляем пожелание бэкенду */
+async function submitEditNote() {
+  if (CONFIG.MOCK_MODE) { startGeneration(); return; }
+  renderLoading({
+    icon: '✏️',
+    title: 'Правлю текст с учётом пожеланий',
+    steps: ['Читаю, что поправить…', 'Переписываю строки…', 'Сохраняю вайб песни…'],
+  });
+  try {
+    const res = await api('/.netlify/functions/lyrics', 'POST', {
+      orderId: state.orderId,
+      token: state.token,
+      editNote: state.editNote,
+    });
+    state.lyrics = res.lyrics;
+    stopLoading();
+    renderLyrics();
+  } catch (e) {
+    renderError(e.message, renderEditNote);
+  }
 }
 
 /* ============ ГЕНЕРАЦИЯ ДЕМО ============ */
@@ -337,13 +405,30 @@ async function startDemo() {
     title: 'Создаю музыку и демо-фрагмент',
     steps: ['Подбираю инструменты…', 'Записываю вокал…', 'Свожу трек…', 'Вырезаю демо 30 секунд…'],
   });
-  if (CONFIG.MOCK_MODE) {
-    await sleep(CONFIG.MOCK_MUSIC_DELAY);
-  } else {
-    // await apiGenerateMusic();
+  try {
+    if (CONFIG.MOCK_MODE) {
+      await sleep(CONFIG.MOCK_MUSIC_DELAY);
+    } else {
+      // запускаем генерацию музыки и ждём готовности (обычно до 5 мин, в пик до 20)
+      await api('/.netlify/functions/music', 'POST', { orderId: state.orderId, token: state.token });
+      let ready = false;
+      for (let i = 0; i < 200; i++) {
+        await sleep(7000);
+        const st = await api('/.netlify/functions/status?orderId=' + encodeURIComponent(state.orderId) + '&token=' + encodeURIComponent(state.token));
+        const label = document.getElementById('loading-status');
+        if (label && st.status && st.status !== 'music') {
+          label.textContent = st.status === 'demo_ready' ? 'Готово!' : 'Статус: ' + st.status + '…';
+        }
+        if (st.status === 'demo_ready') { state.demoUrl = st.demoUrl; ready = true; break; }
+        if (st.status === 'music_failed') throw new Error('Песня не получилась — попробуем ещё раз?');
+      }
+      if (!ready) throw new Error('Генерация затянулась. Нажмите «Проверить» чуть позже.');
+    }
+    stopLoading();
+    renderDemo();
+  } catch (e) {
+    renderError(e.message, startDemo);
   }
-  stopLoading();
-  renderDemo();
 }
 
 function renderDemo() {
@@ -483,10 +568,18 @@ async function pay(provider) {
     renderSuccess(true);
     return;
   }
-  // РЕАЛЬНАЯ ОПЛАТА — включится после доступов:
-  // provider = 'yookassa' (Россия) или 'lava' (другие страны)
-  // const url = await apiCreatePayment(provider);
-  // window.location.href = url;
+  try {
+    // создаём платёж и уходим на платёжную страницу
+    const res = await api('/.netlify/functions/payment', 'POST', {
+      orderId: state.orderId,
+      token: state.token,
+      email: state.email,
+      provider,
+    });
+    window.location.href = res.paymentUrl;
+  } catch (e) {
+    renderError(e.message, () => pay(provider));
+  }
 }
 
 async function checkPayment() {
@@ -501,14 +594,29 @@ async function checkPayment() {
     renderSuccess(true);
     return;
   }
-  // await apiConfirmPayment();
+  try {
+    const res = await api('/.netlify/functions/confirm-payment?orderId=' + encodeURIComponent(state.orderId));
+    if (res.paid) {
+      state.fullSongUrl = res.downloadUrl;
+      state.email = res.email || state.email;
+      stopLoading();
+      renderSuccess(false);
+    } else {
+      renderError('Оплата пока не прошла. Если вы только что заплатили — подождите минуту и попробуйте ещё раз.', checkPayment);
+    }
+  } catch (e) {
+    renderError(e.message, checkPayment);
+  }
 }
 
 function renderSuccess(mock = false) {
   // ссылка на полную версию: в рабочем режиме приходит с бэкенда после оплаты,
   // в демо — пример мелодии
   const songUrl = state.fullSongUrl || 'demo-song.wav';
-  const fileName = 'Sono — песня для ' + (state.name || 'вас') + '.wav';
+  // в рабочем режиме имя файла задаёт сервер (Sono — песня для Имя.mp3)
+  const fileNameAttr = CONFIG.MOCK_MODE
+    ? ' download="Sono — песня для ' + esc(state.name || 'вас') + '.wav"'
+    : ' download';
   render(`
     <div class="success-check">✓</div>
     <div class="quiz__question" style="text-align:center;">Всё получилось! 🎉</div>
@@ -518,7 +626,7 @@ function renderSuccess(mock = false) {
         : 'Мы отправили песню и на почту <b>' + esc(state.email) + '</b>. Если письма нет — проверьте папку «Спам».'}
     </div>
     <div class="success-actions">
-      <a class="btn btn--accent btn--wide" href="${songUrl}" download="${esc(fileName)}">⬇️ Скачать полную версию</a>
+      <a class="btn btn--accent btn--wide" href="${songUrl}"${fileNameAttr}>⬇️ Скачать полную версию</a>
       <button class="btn btn--ghost btn--wide" id="btn-again">🎵 Создать ещё одну</button>
     </div>
   `);
@@ -527,8 +635,34 @@ function renderSuccess(mock = false) {
 
 function resetQuiz() {
   stopDemoAudio();
-  Object.assign(state, { country: null, occasion: null, genre: null, vocal: null, name: '', details: '', email: '', orderId: null, lyrics: '', editNote: '', fullSongUrl: null });
+  Object.assign(state, { country: null, occasion: null, genre: null, vocal: null, name: '', details: '', email: '', orderId: null, token: null, lyrics: '', editNote: '', demoUrl: null, fullSongUrl: null });
   stepCountry();
+}
+
+/* Возврат с платёжной страницы: ссылка вида ?order=ID&p=1
+   Дожидаемся подтверждения оплаты и сразу показываем скачивание */
+async function handlePaymentReturn(orderId) {
+  state.orderId = orderId;
+  renderLoading({
+    icon: '💳',
+    title: 'Проверяю оплату',
+    steps: ['Сверяю счёт…', 'Открываю вашу песню…'],
+  });
+  for (let i = 0; i < 40; i++) {
+    try {
+      const res = await api('/.netlify/functions/confirm-payment?orderId=' + encodeURIComponent(orderId));
+      if (res.paid) {
+        state.fullSongUrl = res.downloadUrl;
+        state.name = res.name || 'вас';
+        state.email = res.email || '';
+        stopLoading();
+        renderSuccess(false);
+        return;
+      }
+    } catch (e) { /* попробуем ещё раз */ }
+    await sleep(5000);
+  }
+  renderError('Не удалось подтвердить оплату — напишите в поддержку, мы найдём ваш платёж.', resetQuiz);
 }
 
 /* ============ ЗАГЛУШКА ТЕКСТА (только для MOCK_MODE) ============ */
@@ -625,4 +759,14 @@ async function apiConfirmPayment() {
 window.addEventListener('resize', () => sizeChips());
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => sizeChips());
 
-stepCountry();
+// старт: если вернулись с оплаты (?order=ID&p=1) — проверяем платёж и отдаём песню,
+// иначе — обычное начало квиза
+(function start() {
+  const q = new URLSearchParams(location.search);
+  const ret = q.get('order');
+  if (ret && !CONFIG.MOCK_MODE) {
+    handlePaymentReturn(ret);
+  } else {
+    stepCountry();
+  }
+})();
