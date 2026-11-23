@@ -51,6 +51,7 @@ const state = {
   email: '',         // почта для оплаты и получения песни
   orderId: null,     // id заказа с бэкенда
   lyrics: '',        // текст песни
+  editNote: '',      // что человек просил исправить в тексте
   pack: null,        // выбранный пакет (число генераций)
 };
 
@@ -273,10 +274,13 @@ function stepVocal()    { backTo = stepGenre;   renderChipStep({ step: 4, total:
 async function startGeneration() {
   backTo = stepFinal;
   setProgress(5, TOTAL_STEPS);
+  const editing = !!state.editNote;
   renderLoading({
-    icon: '🎵',
-    title: 'Пишу персональный текст песни',
-    steps: ['Читаю вашу историю…', 'Придумываю рифмы…', 'Вплетаю имя в припев…', 'Полирую строки…'],
+    icon: editing ? '✏️' : '🎵',
+    title: editing ? 'Правлю текст с учётом пожеланий' : 'Пишу персональный текст песни',
+    steps: editing
+      ? ['Читаю, что поправить…', 'Переписываю строки…', 'Сохраняю вайб песни…']
+      : ['Читаю вашу историю…', 'Придумываю рифмы…', 'Вплетаю имя в припев…', 'Полирую строки…'],
   });
 
   if (CONFIG.MOCK_MODE) {
@@ -295,7 +299,7 @@ function renderLyrics() {
   render(`
     <div class="badge-demo">Текст — бесплатно, можно переделать</div>
     <div class="quiz__question">Вот текст вашей песни 🎤</div>
-    <div class="quiz__hint">Прочитайте — если что-то не так, изменим бесплатно</div>
+    <div class="quiz__hint">Прочитайте — если что-то не так, напишите что исправить, и ИИ перепишет бесплатно</div>
     <div class="lyrics">${esc(state.lyrics)}</div>
     ${CONFIG.MOCK_MODE ? '<div class="mock-note">Демо-режим: текст сгенерирован заглушкой. После подключения API здесь будет настоящий текст от нейросети.</div>' : ''}
     <div class="quiz__actions">
@@ -303,8 +307,35 @@ function renderLyrics() {
       <button class="btn btn--accent btn--wide" id="btn-like">✅ Продолжить</button>
     </div>
   `);
-  document.getElementById('btn-redo').addEventListener('click', startGeneration);
+  document.getElementById('btn-redo').addEventListener('click', renderEditNote);
   document.getElementById('btn-like').addEventListener('click', startDemo);
+}
+
+/* Экран правок: человек пишет своими словами, что исправить в тексте */
+function renderEditNote() {
+  render(`
+    <div class="quiz__question">Что исправить? ✏️</div>
+    <div class="quiz__hint">Напиши своими словами — ИИ перепишет текст с учётом пожеланий</div>
+    <div class="field">
+      <textarea class="textarea" id="inp-edit" placeholder="Например: добавь куплет про её кота, сделай припев веселее, убери про зиму…">${esc(state.editNote)}</textarea>
+      <div class="error-text" id="err">Напиши хотя бы пару слов, что поправить</div>
+    </div>
+    <div class="quiz__hint" style="margin-bottom:0;">Правки бесплатные — до оплаты можно переделывать сколько нужно</div>
+    <div class="quiz__actions">
+      <button class="btn btn--ghost" id="btn-back">← К тексту</button>
+      <button class="btn btn--accent btn--wide" id="btn-fix" ${state.editNote ? '' : 'disabled'}>Исправить</button>
+    </div>
+  `);
+  const inp = document.getElementById('inp-edit');
+  const btn = document.getElementById('btn-fix');
+  inp.addEventListener('input', () => {
+    state.editNote = inp.value.trim();
+    btn.disabled = state.editNote.length === 0;
+    document.getElementById('err').style.display = 'none';
+  });
+  document.getElementById('btn-back').addEventListener('click', renderLyrics);
+  btn.addEventListener('click', () => { if (!btn.disabled) startGeneration(); });
+  inp.focus();
 }
 
 /* ============ ГЕНЕРАЦИЯ ДЕМО ============ */
@@ -517,15 +548,32 @@ function resetQuiz() {
 
 function mockLyrics() {
   const n = state.name || 'дорогой человек';
+  // варианты, чтобы при каждой генерации/правке текст визуально менялся
+  const hooks = [
+    'крутая, и в этом нет сомнений',
+    'лучше всех на свете, без сомнений',
+    'самая любимая, без сомнений',
+  ];
+  const ends = [
+    'Моя любовь к тебе — один огромный, мощный трек.',
+    'С тобой любой мой день — как хит на весь мир.',
+    'И это лишь начало нашей большой истории.',
+  ];
+  const hook = hooks[Math.floor(Math.random() * hooks.length)];
+  const end = ends[Math.floor(Math.random() * ends.length)];
   const d = state.details
     ? 'Вспомним, как ' + state.details.charAt(0).toLowerCase() + state.details.slice(1, 90).replace(/[.,;!?]$/, '') + '…'
     : 'Каждый миг с тобою — как подарок судьбы…';
+  // если человек просил что-то исправить — показываем, что пожелание учтено (только для демо)
+  const fix = state.editNote
+    ? `\n\n(Демо-заглушка учла пожелание: «${state.editNote}». В рабочем режиме ИИ перепишет текст по-настоящему.)`
+    : '';
   return (
 `[Припев]
-${n} крутая, и в этом нет сомнений,
+${n} ${hook},
 Ты — душа из всех моих решений и стремлений.
-${n} крутая, мой близкий человек,
-Моя любовь к тебе — один огромный, мощный трек.
+${n} ${hook}, мой близкий человек,
+${end}
 
 [Куплет]
 ${d}
@@ -533,8 +581,8 @@ ${d}
 Ценю твой вайб, ценю тебя, и искренне люблю.
 
 [Припев]
-${n} крутая, и в этом нет сомнений,
-Ты — душа из всех моих решений и стремлений.`);
+${n} ${hook},
+Ты — душа из всех моих решений и стремлений.${fix}`);
 }
 
 /* ============ БУДУЩИЕ API-ФУНКЦИИ (пока не активны) ============ */
@@ -556,6 +604,7 @@ async function apiCreateOrder() {
       vocal: state.vocal,
       name: state.name,
       details: state.details,
+      edit_note: state.editNote,   // пожелания по правке текста
     }),
   });
   const data = await res.json();
