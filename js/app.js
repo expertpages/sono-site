@@ -16,14 +16,9 @@ const CONFIG = {
   // Адрес бэкенда (из переписки — тестовый сервер, потом поменяем на боевой)
   API_BASE: 'https://song-test.aibottools.ru',
 
-  // Пакеты — цены взяты из бота (скрин «Покупка полной версии»: 690/890/990/1390 ₽).
-  // usd — примерная цена для Lava (зарубежные карты), можно скорректировать.
-  PRICES: [
-    { songs: 1,  rub: 690,  usd: 9,  best: false },
-    { songs: 2,  rub: 890,  usd: 12, best: false },
-    { songs: 3,  rub: 990,  usd: 13, best: false },
-    { songs: 10, rub: 1390, usd: 18, best: true  },
-  ],
+  // Цена одной песни: РФ (ЮKassa) — рубли, другие страны (Lava) — доллары.
+  // Пакеты из нескольких песен пока отключены — вернём, когда появится регистрация.
+  PRICE: { rub: 690, usd: 9 },
 
   // Время генерации (для показа прогресса в демо-режиме)
   MOCK_LYRICS_DELAY: 2500,   // мс — «пишем текст»
@@ -52,7 +47,6 @@ const state = {
   orderId: null,     // id заказа с бэкенда
   lyrics: '',        // текст песни
   editNote: '',      // что человек просил исправить в тексте
-  pack: null,        // выбранный пакет (число генераций)
   fullSongUrl: null, // ссылка на полную версию (придёт с бэкенда после оплаты)
 };
 
@@ -168,10 +162,6 @@ function plural(n, one, few, many) {
   if (n % 10 === 1 && n % 100 !== 11) return one;
   if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return few;
   return many;
-}
-
-function priceOf(songs) {
-  return CONFIG.PRICES.find(p => p.songs === songs) || CONFIG.PRICES[0];
 }
 
 /* ============ РЕНДЕР ШАГОВ ============ */
@@ -394,7 +384,8 @@ function renderDemo() {
   });
 
   document.getElementById('btn-lyrics-back').addEventListener('click', () => { stopDemoAudio(); renderLyrics(); });
-  document.getElementById('btn-pay').addEventListener('click', () => { stopDemoAudio(); stepPack(); });
+  // пакеты отключены: сразу идём на почту для оплаты
+  document.getElementById('btn-pay').addEventListener('click', () => { stopDemoAudio(); stepEmail(); });
 }
 
 let demoAudio = null;
@@ -406,43 +397,10 @@ function fmtTime(s) {
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
 
-/* ============ ВЫБОР ПАКЕТА (как в боте) ============ */
-
-function stepPack() {
-  const options = CONFIG.PRICES.map(p => `
-    <button class="pay-option ${state.pack === p.songs ? 'pay-option--selected' : ''}" data-songs="${p.songs}">
-      <div class="pay-option__songs">${p.songs} ${plural(p.songs, 'генерация', 'генерации', 'генераций')}</div>
-      <div class="pay-option__price">${p.rub} ₽${p.best ? ' · 💎 выгоднее всего' : ''}</div>
-    </button>
-  `).join('');
-
-  render(`
-    <div class="quiz__question">💳 Покупка полной версии</div>
-    <div class="quiz__hint">Выбери пакет:</div>
-    <div class="pay-grid">${options}</div>
-    <div class="quiz__actions">
-      <button class="btn btn--ghost btn--back" id="btn-back">← Демо</button>
-      <button class="btn btn--accent btn--wide" id="btn-next" ${state.pack ? '' : 'disabled'}>Дальше</button>
-    </div>
-  `);
-  setProgress(5, TOTAL_STEPS);
-
-  const packBtns = card().querySelectorAll('.pay-option');
-  const nextBtn = document.getElementById('btn-next');
-  packBtns.forEach(btn => btn.addEventListener('click', () => {
-    packBtns.forEach(b => b.classList.remove('pay-option--selected'));
-    btn.classList.add('pay-option--selected');
-    state.pack = Number(btn.dataset.songs);
-    nextBtn.disabled = false;
-  }));
-  nextBtn.addEventListener('click', stepEmail);
-  document.getElementById('btn-back').addEventListener('click', renderDemo);
-}
-
-/* ============ ПОЧТА (как в боте — перед оплатой) ============ */
+/* ============ ПОЧТА (перед оплатой, как в боте) ============ */
 
 function stepEmail() {
-  backTo = stepPack;
+  backTo = renderDemo;
   render(`
     <div class="quiz__question">Почта для оплаты 📧</div>
     <div class="quiz__hint">Напиши адрес электронной почты для оформления оплаты — на него придёт полная версия песни</div>
@@ -474,15 +432,14 @@ function stepEmail() {
 /* ============ ИТОГ И ОПЛАТА (как в боте) ============ */
 
 function renderSummary() {
-  const p = priceOf(state.pack);
-  const rest = p.songs - 1;
   // ЛОГИКА ОПЛАТЫ: выбрали Россию → ЮKassa, любую другую страну → Lava.top
+  // Одна песня = одна оплата (пакеты из нескольких песен пока отключены)
   const fromRussia = state.country === '🇷🇺 Россия';
   const provider = fromRussia ? 'yookassa' : 'lava';
   const method = fromRussia
     ? '💳 Способ: карта РФ / СБП — ЮKassa'
     : '🌍 Способ: зарубежная карта — Lava';
-  const amount = fromRussia ? p.rub + ' ₽' : '$' + p.usd;
+  const amount = fromRussia ? CONFIG.PRICE.rub + ' ₽' : '$' + CONFIG.PRICE.usd;
   const note = fromRussia
     ? ''
     : '<div class="quiz__hint" style="margin-top:12px;">Сумма в долларах — пересчёт по курсу Банка России на момент оплаты</div>';
@@ -492,24 +449,26 @@ function renderSummary() {
     : '';
 
   render(`
-    <div class="quiz__question">💳 Покупка полной версии</div>
+    <div class="quiz__question">💳 Полная версия песни</div>
     <div class="summary">
-      Пакет: ${p.songs} ${plural(p.songs, 'генерация', 'генерации', 'генераций')}<br>
+      Песня: полная версия без ограничений<br>
       Сумма: <b>${amount}</b><br>
       ${method}<br><br>
-      После оплаты одна генерация пойдёт на эту песню, ещё ${rest} ${plural(rest, 'останется', 'останутся', 'останутся')} на балансе.
+      После оплаты сразу сможете скачать полную версию — и она же придёт на почту.
     </div>
     ${mockNote}
     <div class="pay-methods" style="margin-top:18px;">
       <button class="btn btn--accent" id="btn-pay-go">💳 Перейти к оплате</button>
       <button class="btn" id="btn-check">✅ Проверить оплату</button>
-      <button class="btn btn--ghost" id="btn-change">🔄 Изменить пакет</button>
+    </div>
+    <div class="quiz__actions" style="margin-top:12px;">
+      <button class="btn btn--ghost btn--back" id="btn-back">← Назад</button>
     </div>
     ${note}
   `);
   document.getElementById('btn-pay-go').addEventListener('click', () => pay(provider));
   document.getElementById('btn-check').addEventListener('click', checkPayment);
-  document.getElementById('btn-change').addEventListener('click', stepPack);
+  document.getElementById('btn-back').addEventListener('click', stepEmail);
 }
 
 async function pay(provider) {
@@ -568,7 +527,7 @@ function renderSuccess(mock = false) {
 
 function resetQuiz() {
   stopDemoAudio();
-  Object.assign(state, { country: null, occasion: null, genre: null, vocal: null, name: '', details: '', email: '', orderId: null, lyrics: '', editNote: '', pack: null, fullSongUrl: null });
+  Object.assign(state, { country: null, occasion: null, genre: null, vocal: null, name: '', details: '', email: '', orderId: null, lyrics: '', editNote: '', fullSongUrl: null });
   stepCountry();
 }
 
