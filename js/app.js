@@ -53,6 +53,7 @@ const state = {
   lyrics: '',        // текст песни
   editNote: '',      // что человек просил исправить в тексте
   pack: null,        // выбранный пакет (число генераций)
+  fullSongUrl: null, // ссылка на полную версию (придёт с бэкенда после оплаты)
 };
 
 /* ============ УТИЛИТЫ ============ */
@@ -364,24 +365,45 @@ function renderDemo() {
       <button class="player__btn" id="btn-play">▶</button>
       <div class="player__info">
         <div class="player__name">${esc(state.occasion ? state.occasion.replace(/^\S+\s/, '') : '')} — ${esc(state.genre || '')}</div>
-        <div class="player__time">0:30 · ${esc(state.genre || '')}</div>
+        <div class="player__time" id="demo-time">0:00 · 0:30 · ${esc(state.genre || '')}</div>
         <div class="player__wave">${bars}</div>
       </div>
     </div>
-    ${CONFIG.MOCK_MODE ? '<div class="mock-note">Демо-режим: аудио пока не подключено. Здесь будет настоящий 30-секундный фрагмент вашей песни.</div>' : ''}
+    ${CONFIG.MOCK_MODE ? '<div class="mock-note">Демо-режим: пока играет демонстрационная мелодия. После подключения API здесь будет настоящий 30-секундный фрагмент вашей песни.</div>' : ''}
     <div class="quiz__hint" style="margin-top:14px;">🔥 Понравилось? Забирай полную версию!</div>
     <div class="quiz__actions">
       <button class="btn btn--ghost" id="btn-lyrics-back">← Текст</button>
       <button class="btn btn--accent btn--wide" id="btn-pay">💎 Скачать полную версию</button>
     </div>
   `);
-  document.getElementById('btn-play').addEventListener('click', function () {
-    if (CONFIG.MOCK_MODE) {
-      this.textContent = this.textContent === '▶' ? '⏸' : '▶';
-    }
+
+  // плеер: играет демо-мелодию (в рабочем режиме — фрагмент настоящей песни)
+  const playBtn = document.getElementById('btn-play');
+  const timeEl = document.getElementById('demo-time');
+  const url = state.demoUrl || 'demo-song.wav';
+  const audio = new Audio(url);
+  stopDemoAudio();
+  demoAudio = audio;
+  audio.addEventListener('timeupdate', () => {
+    timeEl.textContent = fmtTime(audio.currentTime) + ' · 0:30 · ' + (state.genre || '');
   });
-  document.getElementById('btn-lyrics-back').addEventListener('click', renderLyrics);
-  document.getElementById('btn-pay').addEventListener('click', stepPack);
+  audio.addEventListener('ended', () => { playBtn.textContent = '▶'; });
+  playBtn.addEventListener('click', () => {
+    if (audio.paused) { audio.play(); playBtn.textContent = '⏸'; }
+    else { audio.pause(); playBtn.textContent = '▶'; }
+  });
+
+  document.getElementById('btn-lyrics-back').addEventListener('click', () => { stopDemoAudio(); renderLyrics(); });
+  document.getElementById('btn-pay').addEventListener('click', () => { stopDemoAudio(); stepPack(); });
+}
+
+let demoAudio = null;
+function stopDemoAudio() {
+  if (demoAudio) { demoAudio.pause(); demoAudio.src = ''; demoAudio = null; }
+}
+function fmtTime(s) {
+  s = Math.max(0, Math.floor(s));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
 
 /* ============ ВЫБОР ПАКЕТА (как в боте) ============ */
@@ -524,23 +546,29 @@ async function checkPayment() {
 }
 
 function renderSuccess(mock = false) {
+  // ссылка на полную версию: в рабочем режиме приходит с бэкенда после оплаты,
+  // в демо — пример мелодии
+  const songUrl = state.fullSongUrl || 'demo-song.wav';
+  const fileName = 'Sono — песня для ' + (state.name || 'вас') + '.wav';
   render(`
     <div class="success-check">✓</div>
-    <div class="quiz__question" style="text-align:center;">Всё получилось!</div>
+    <div class="quiz__question" style="text-align:center;">Всё получилось! 🎉</div>
     <div class="quiz__hint" style="text-align:center;">
       ${mock
-        ? 'Это демо: после подключения API здесь будет оплата, а полная версия песни придёт на <b>' + esc(state.email) + '</b>.'
-        : 'Полная версия песни отправлена на <b>' + esc(state.email) + '</b>. Если письма нет — проверьте папку «Спам».'}
+        ? 'Демо-режим: по кнопке скачается пример песни (заглушка). В рабочем режиме здесь будет ваша настоящая песня.'
+        : 'Мы отправили песню и на почту <b>' + esc(state.email) + '</b>. Если письма нет — проверьте папку «Спам».'}
     </div>
-    <div class="quiz__actions" style="justify-content:center;">
-      <button class="btn btn--accent" id="btn-again">🎵 Создать ещё одну</button>
+    <div class="success-actions">
+      <a class="btn btn--accent btn--wide" href="${songUrl}" download="${esc(fileName)}">⬇️ Скачать полную версию</a>
+      <button class="btn btn--ghost btn--wide" id="btn-again">🎵 Создать ещё одну</button>
     </div>
   `);
   document.getElementById('btn-again').addEventListener('click', resetQuiz);
 }
 
 function resetQuiz() {
-  Object.assign(state, { country: null, occasion: null, genre: null, vocal: null, name: '', details: '', email: '', orderId: null, lyrics: '', pack: null });
+  stopDemoAudio();
+  Object.assign(state, { country: null, occasion: null, genre: null, vocal: null, name: '', details: '', email: '', orderId: null, lyrics: '', editNote: '', pack: null, fullSongUrl: null });
   stepCountry();
 }
 
