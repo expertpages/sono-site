@@ -343,6 +343,15 @@ body {
   margin-bottom: 8px;
 }
 
+/* кнопки на экране успеха (скачать / создать ещё) */
+.success-actions {
+  display: grid; gap: 11px; margin-top: 16px;
+}
+a.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  text-decoration: none;
+}
+
 .success-check {
   width: 72px; height: 72px;
   border-radius: 50%;
