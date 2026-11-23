@@ -75,7 +75,41 @@ function render(html) {
     '<div class="quiz__scroll">' + scrollPart + '</div>' +
     (actionsPart ? '<div class="quiz__footer">' + actionsPart + '</div>' : '');
   const sc = card().querySelector('.quiz__scroll');
-  if (sc) sc.scrollTop = 0;
+  if (sc) {
+    sc.scrollTop = 0;
+    // шаги без вариантов — центрируем по вертикали, чтобы не было пустоты
+    sc.style.justifyContent = scrollPart.indexOf('chips') === -1 ? 'center' : 'flex-start';
+  }
+}
+
+/* Подгоняем высоту кнопок-вариантов, чтобы они ровно заполняли экран:
+   мало вариантов — один столбик крупными кнопками,
+   много (10+) — два столбца, чтобы всё влезло без листания. */
+function sizeChips() {
+  const sc = card().querySelector('.quiz__scroll');
+  const wrap = card().querySelector('.chips');
+  const chips = card().querySelectorAll('.chip');
+  if (!sc || !wrap || !chips.length) return;
+  chips.forEach(c => { c.style.height = ''; });
+
+  // высота всего, что выше кнопок (заголовок, подсказка и т.д.)
+  let otherH = 0;
+  [...sc.children].forEach(el => {
+    if (el === wrap) return;
+    const cs = getComputedStyle(el);
+    otherH += el.offsetHeight + parseFloat(cs.marginTop || 0) + parseFloat(cs.marginBottom || 0);
+  });
+  const scs = getComputedStyle(sc);
+  const padV = parseFloat(scs.paddingTop || 0) + parseFloat(scs.paddingBottom || 0);
+
+  const twoCols = chips.length >= 10;
+  wrap.style.gridTemplateColumns = twoCols ? '1fr 1fr' : '1fr';
+  const rows = twoCols ? Math.ceil(chips.length / 2) : chips.length;
+  const gap = 10;
+
+  let h = (sc.clientHeight - padV - otherH - gap * (rows - 1)) / rows;
+  h = Math.floor(Math.min(120, Math.max(twoCols ? 46 : 52, h)));
+  chips.forEach(c => { c.style.height = h + 'px'; });
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -121,6 +155,7 @@ function renderChipStep({ step, total, question, hint, options, key, next, intro
   document.getElementById('btn-next').addEventListener('click', next);
   const back = document.getElementById('btn-back');
   if (back) back.addEventListener('click', () => backTo && backTo());
+  requestAnimationFrame(sizeChips); // подгоняем кнопки после отрисовки
 }
 
 // Шаг «Финальный штрих» — имя героя + истории/пожелания (как в боте)
@@ -493,5 +528,9 @@ async function apiConfirmPayment() {
 */
 
 /* ============ СТАРТ ============ */
+
+// при повороте экрана / изменении размеров — пересчитываем кнопки
+window.addEventListener('resize', () => sizeChips());
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => sizeChips());
 
 stepCountry();
