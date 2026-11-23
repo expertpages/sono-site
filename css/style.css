@@ -318,6 +318,22 @@ body {
   margin: 14px auto 16px;
 }
 
+/* ============ МАЛЕНЬКИЕ ЭКРАНЫ (iPhone SE и др.) — всё компактнее, чтобы кнопки влезали целиком ============ */
+@media (max-height: 700px) {
+  .app { gap: 8px; padding-top: 10px; padding-bottom: 8px; }
+  .top__logo { font-size: 20px; margin-bottom: 6px; }
+  .progress { margin-bottom: 5px; }
+  .quiz__scroll { padding: 16px 16px 6px; }
+  .quiz__footer { padding: 8px 16px 12px; }
+  .intro { margin-bottom: 12px; }
+  .intro__title { font-size: 20px; margin-bottom: 8px; }
+  .intro__item { font-size: 13.5px; margin-bottom: 4px; }
+  .quiz__question { font-size: 21px; margin-bottom: 4px; }
+  .quiz__hint { font-size: 13px; margin-bottom: 12px; }
+  .btn { padding: 14px 20px; font-size: 15.5px; }
+  .bottom { display: none; } /* ссылки внизу прячем — экономим высоту */
+}
+
 /* ============ НИЗ ============ */
 .bottom {
   flex-shrink: 0;
