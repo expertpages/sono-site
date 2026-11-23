@@ -82,15 +82,16 @@ function render(html) {
   }
 }
 
-/* Подгоняем высоту кнопок-вариантов, чтобы они ровно заполняли экран:
-   мало вариантов — один столбик крупными кнопками,
-   много (10+) — два столбца, чтобы всё влезло без листания. */
+/* Подгоняем кнопки-варианты так, чтобы ВСЕ были видны сразу без листания:
+   пробуем раскладки от самой крупной к самой плотной и берём первую,
+   которая влезает на экран. */
 function sizeChips() {
   const sc = card().querySelector('.quiz__scroll');
   const wrap = card().querySelector('.chips');
   const chips = card().querySelectorAll('.chip');
-  if (!sc || !wrap || !chips.length) return;
-  chips.forEach(c => { c.style.height = ''; });
+  const n = chips.length;
+  if (!sc || !wrap || !n) return;
+  chips.forEach(c => { c.style.height = ''; c.style.fontSize = ''; });
 
   // высота всего, что выше кнопок (заголовок, подсказка и т.д.)
   let otherH = 0;
@@ -101,15 +102,33 @@ function sizeChips() {
   });
   const scs = getComputedStyle(sc);
   const padV = parseFloat(scs.paddingTop || 0) + parseFloat(scs.paddingBottom || 0);
+  const avail = sc.clientHeight - padV - otherH;
 
-  const twoCols = chips.length >= 10;
-  wrap.style.gridTemplateColumns = twoCols ? '1fr 1fr' : '1fr';
-  const rows = twoCols ? Math.ceil(chips.length / 2) : chips.length;
-  const gap = 10;
+  // раскладки: крупный один столбик → два столбца → три столбца
+  const configs = [
+    { cols: 1, minH: 52, gap: 10, fs: 16 },
+    { cols: 2, minH: 40, gap: 8,  fs: 15 },
+    { cols: 3, minH: 34, gap: 6,  fs: 13.5 },
+  ];
 
-  let h = (sc.clientHeight - padV - otherH - gap * (rows - 1)) / rows;
-  h = Math.floor(Math.min(120, Math.max(twoCols ? 46 : 52, h)));
-  chips.forEach(c => { c.style.height = h + 'px'; });
+  let chosen = null;
+  for (const cfg of configs) {
+    const rows = Math.ceil(n / cfg.cols);
+    const h = Math.floor((avail - (rows - 1) * cfg.gap) / rows);
+    if (h >= cfg.minH) { chosen = { ...cfg, rows, h: Math.min(h, 120) }; break; }
+  }
+  if (!chosen) {
+    // совсем маленький экран: самая плотная раскладка, кнопки минимальные
+    const cfg = configs[configs.length - 1];
+    chosen = { ...cfg, rows: Math.ceil(n / cfg.cols), h: cfg.minH };
+  }
+
+  wrap.style.gridTemplateColumns = 'repeat(' + chosen.cols + ', 1fr)';
+  wrap.style.gap = chosen.gap + 'px';
+  chips.forEach(c => {
+    c.style.height = chosen.h + 'px';
+    c.style.fontSize = chosen.fs + 'px';
+  });
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -136,7 +155,7 @@ function renderChipStep({ step, total, question, hint, options, key, next, intro
   render(`
     ${intro || ''}
     <div class="quiz__question">${question}</div>
-    <div class="quiz__hint">${hint}</div>
+    ${hint ? '<div class="quiz__hint">' + hint + '</div>' : ''}
     <div class="chips">${chips}</div>
     <div class="quiz__actions">
       ${step > 1 ? '<button class="btn btn--ghost btn--back" id="btn-back">← Назад</button>' : ''}
